@@ -49,3 +49,4 @@ See [`student_instructions.md`](student_instructions.md) for complete assignment
 - [Python Blueprint](https://flask.palletsprojects.com/en/stable/blueprints)
 
 
+![Library Database Test](https://github.com/gregory-ai/cisc327-library-management-a2-3975/actions/workflows/test.yml/badge.svg)
