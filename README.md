@@ -50,3 +50,5 @@ See [`student_instructions.md`](student_instructions.md) for complete assignment
 
 
 ![Library Database Test](https://github.com/gregory-ai/cisc327-library-management-a2-3975/actions/workflows/test.yml/badge.svg)
+
+[![codecov](https://codecov.io/gh/gregory-ai/cisc327-library-management-a2-3975/graph/badge.svg?token=57YHUV5442)](https://codecov.io/gh/gregory-ai/cisc327-library-management-a2-3975)
