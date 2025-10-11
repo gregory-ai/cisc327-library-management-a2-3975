@@ -193,9 +193,11 @@ def test_borrow_book_by_patron_invalid_book_id():
 
 def test_borrow_book_by_patron_unavailable_book():
     # Test4 borrowing a book that is unavailable.
-    add_book_to_catalog("Unavailable Book", "No Author", "3000000000004", 0)
+    add_book_to_catalog("Unavailable Book", "No Author", "3000000000004", 1)
     book = get_book_by_isbn("3000000000004")
-    success, message = borrow_book_by_patron("300004", book["id"])
+    borrow_book_by_patron("300004", book["id"])
+
+    success, message = borrow_book_by_patron("310004", book["id"])
     
     assert success == False
     assert "This book is currently not available." in message
@@ -341,7 +343,7 @@ def test_search_books_in_catalog_by_title_partial():
     add_book_to_catalog("How to be Creative", "Alex Greg", "6000000000001", 3)
     add_book_to_catalog("Creativity", "John Apple", "6000000000002", 2)
     
-    results = search_books_in_catalog("creative", "title")
+    results = search_books_in_catalog("creativ", "title")
     
     assert isinstance(results, list)
     assert any("how to be creative" in book["title"].lower() for book in results)
