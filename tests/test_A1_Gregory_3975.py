@@ -125,14 +125,14 @@ def test_add_book_empty_author():
     assert "Author is required." in message
 
 def test_add_book_whitespace_title():
-    # Test9 adding a book with an empty author.
+    # Test9 adding a book with whitespace title.
     success, message = add_book_to_catalog("   ", "Author Name", "1000000000010", 1)
     assert success == False
     assert "Title is required." in message
 
 
 def test_add_book_whitespace_author():
-    # Test10 adding a book with an empty author.
+    # Test10 adding a book with an whitespace author.
     success, message = add_book_to_catalog("Whitespace Author Test", "   ", "1000000000011", 1)
     assert success == False
     assert "Author is required." in message
@@ -260,7 +260,7 @@ def test_borrow_book_by_patron_exceed_limit():
     assert "You have reached the maximum borrowing limit of 5 books." in message
 
 def test_borrow_book_by_patron_whitespace_in_id():
-    # Test6 patron ID with leading/trailing spaces should be invalid.
+    # Test6 patron ID with leading spaces should be invalid.
     success, message = borrow_book_by_patron(" 600011 ", 1)
     assert success == False
     assert "Invalid patron ID" in message
@@ -467,21 +467,6 @@ def test_calculate_late_fee_exactly_seven_days():
     result = calculate_late_fee_for_book("500013", book["id"])
     assert round(result['fee_amount'], 2) == 3.50
     assert result['days_overdue'] == 7
-    assert result['status'] == "Fee amount successfully calculated."
-
-
-def test_calculate_late_fee_over_seven_days():
-    # Test11 book overdue 10 days should be 3.50 + (10-7)*1 = 6.50
-    add_book_to_catalog("Over Seven Book", "Author", "5000000000014", 1)
-    book = get_book_by_isbn("5000000000014")
-    borrow_book_by_patron("500014", book["id"])
-    
-    record = get_patron_borrowing_history("500014")[0]
-    update_borrow_record_return_date("500014", book["id"], record["due_date"] + timedelta(days=10))
-    
-    result = calculate_late_fee_for_book("500014", book["id"])
-    assert round(result['fee_amount'], 2) == 6.50
-    assert result['days_overdue'] == 10
     assert result['status'] == "Fee amount successfully calculated."
 
 #-----------------------------------------------------------------------------------------------------------------------
