@@ -15,8 +15,26 @@ from library_service import (
 from routes.catalog_routes import catalog_bp  # blueprint
 from routes.borrowing_routes import borrowing_bp # blueprint
 from routes.search_routes import search_bp # blueprint
-from database import get_book_by_isbn, get_book_by_id, update_borrow_record_return_date
+from database import get_book_by_isbn, get_book_by_id, update_borrow_record_return_date, get_patron_borrowing_history, get_db_connection
 
+def reset_database():
+    """
+    Reset the database by clearing all tables.
+    """
+    conn = get_db_connection()
+    try:
+        # Clear borrow records first 
+        conn.execute("DELETE FROM borrow_records")
+        # Clear books
+        conn.execute("DELETE FROM books")
+        conn.commit()
+    finally:
+        conn.close()
+
+@pytest.fixture(autouse=True)
+def clear_db():
+    reset_database()  # Implement this to clear all books, patrons, borrows
+    yield
 
 # pytest fixture that builds a temporary Flask app for testing 
 @pytest.fixture
@@ -106,6 +124,25 @@ def test_add_book_empty_author():
     assert success == False
     assert "Author is required." in message
 
+def test_add_book_whitespace_title():
+    # Test9 adding a book with an empty author.
+    success, message = add_book_to_catalog("   ", "Author Name", "1000000000010", 1)
+    assert success == False
+    assert "Title is required." in message
+
+
+def test_add_book_whitespace_author():
+    # Test10 adding a book with an empty author.
+    success, message = add_book_to_catalog("Whitespace Author Test", "   ", "1000000000011", 1)
+    assert success == False
+    assert "Author is required." in message
+
+def test_add_book_zero_copies():
+    # Test11 adding a book with a total_copies of zero.
+    success, message = add_book_to_catalog("Empty Library", "Zero Author", "1000000000012", 0)
+    assert success == False
+    assert "Total copies must be a positive integer." in message
+
 
 #-----------------------------------------------------------------------------------------------------------------------
 
@@ -174,7 +211,7 @@ def test_borrow_book_by_patron_valid():
 
 
 def test_borrow_book_by_patron_invalid_patron_id():
-    # Test2 borrowing a book with an invalid patron ID.
+    # Test2 borrowing a book with an invalid patron ID (not 6 digits)
     add_book_to_catalog("Some Book", "Some Author", "3000000000002", 1)
     book = get_book_by_isbn("3000000000002")
     success, message = borrow_book_by_patron("3002", book["id"])
@@ -222,6 +259,19 @@ def test_borrow_book_by_patron_exceed_limit():
     assert success == False
     assert "You have reached the maximum borrowing limit of 5 books." in message
 
+def test_borrow_book_by_patron_whitespace_in_id():
+    # Test6 patron ID with leading/trailing spaces should be invalid.
+    success, message = borrow_book_by_patron(" 600011 ", 1)
+    assert success == False
+    assert "Invalid patron ID" in message
+
+
+def test_borrow_book_by_patron_nondigit_id():
+    # Test7 patron ID with non-digit characters should be invalid.
+    success, message = borrow_book_by_patron("ABC123", 1)
+    assert success == False
+    assert "Invalid patron ID" in message
+
 #-----------------------------------------------------------------------------------------------------------------------
 
 # R4: Book Return Processing
@@ -260,6 +310,31 @@ def test_return_book_by_patron_not_borrowed():
     assert success == False
     assert "Book not borrowed by patron." in message
 
+def test_return_book_multiple_patrons_same_book():
+    # Test5 ensure each patron can only return books they borrowed
+    add_book_to_catalog("Shared Book", "Author", "4000000000008", 2)
+    book = get_book_by_isbn("4000000000008")
+    
+    borrow_book_by_patron("400008", book["id"])
+    
+    success, message = return_book_by_patron("410008", book["id"])
+    assert success is False
+    assert "Book not borrowed by patron." in message
+
+def test_return_book_increases_availability():
+    # Test6 returning should increase available copies
+    add_book_to_catalog("Availability Check", "Author", "4000000000009", 1)
+    book = get_book_by_isbn("4000000000009")
+    borrow_book_by_patron("400009", book["id"])
+
+    borrowed_book = get_book_by_isbn("4000000000009")
+    assert borrowed_book["available_copies"] == 0
+
+    return_book_by_patron("400009", book["id"])
+
+    returned_book = get_book_by_isbn("4000000000009")
+    assert returned_book["available_copies"] == 1
+
 #-----------------------------------------------------------------------------------------------------------------------
 
 # R5: Late Fee Calculation API
@@ -267,7 +342,7 @@ def test_return_book_by_patron_not_borrowed():
 # 'fee_amount' (float), 'days_overdue' (int), 'status' (str for errors)
 
 def test_calculate_late_fee_for_book_valid():
-    # Test1: valid patron and book IDs should return a dict with expected keys.
+    # Test1 valid patron and book IDs should return a dict with expected keys.
     add_book_to_catalog("Late Fee Book", "Late Author", "5000000000001", 1)
     book = get_book_by_isbn("5000000000001")
     borrow_book_by_patron("500001", book["id"])
@@ -282,8 +357,9 @@ def test_calculate_late_fee_for_book_valid():
     assert result['status'] == "Book is not overdue."
 
 def test_calculate_late_fee_for_book_invalid_patron_id():
-    # Test2: invalid patron ID should return an error status.
-    book = get_book_by_isbn("5000000000001")
+    # Test2 invalid patron ID should return an error status.
+    add_book_to_catalog("Late Fee Book", "Late Author", "5000000000002", 1)
+    book = get_book_by_isbn("5000000000002")
     result = calculate_late_fee_for_book("invalid_patron", book["id"])
     
     assert isinstance(result, dict)
@@ -291,7 +367,7 @@ def test_calculate_late_fee_for_book_invalid_patron_id():
     assert result['status'] == "Invalid patron ID. Must be exactly 6 digits."
 
 def test_calculate_late_fee_for_book_invalid_book_id():
-    # Test3: invalid book ID should return an error status.
+    # Test3 invalid book ID should return an error status.
     result = calculate_late_fee_for_book("500003", "invalid_book_id")
     
     assert isinstance(result, dict) 
@@ -299,8 +375,9 @@ def test_calculate_late_fee_for_book_invalid_book_id():
     assert result['status'] == "Book not found." 
 
 def test_calculate_late_fee_for_book_not_borrowed():
-    # Test4: book not borrowed by the patron should return an error status.
-    book = get_book_by_isbn("4000000000001")
+    # Test4 book not borrowed by the patron should return an error status.
+    add_book_to_catalog("Late Fee Book", "Late Author", "5000000000004", 1)
+    book = get_book_by_isbn("5000000000004")
     result = calculate_late_fee_for_book("500004", book["id"])
     
     assert isinstance(result, dict)
@@ -308,7 +385,7 @@ def test_calculate_late_fee_for_book_not_borrowed():
     assert result['status'] == "Book not borrowed by patron."
 
 def test_calculate_late_fee_accurate_fee_calculation():
-    # Test5: return date manipulated, fee_amount should be 6.50
+    # Test5 book overdue 10 days should be 3.50 + (10-7)*1 = 6.50
     add_book_to_catalog("Important book", "Mr.Important", "5000000000005", 1)
     book = get_book_by_isbn("5000000000005")
     borrow_book_by_patron("500005", book["id"])
@@ -321,7 +398,7 @@ def test_calculate_late_fee_accurate_fee_calculation():
     assert result['status'] == "Fee amount successfully calculated." 
 
 def test_calculate_late_fee_not_returned_book():
-    # Test6: book fee will not calculate and return error status
+    # Test6 book fee will not calculate and return error status
     add_book_to_catalog("Book not returned", "Adam Bob", "5000000000006", 1)
     book = get_book_by_isbn("5000000000006")
     borrow_book_by_patron("500006", book["id"])
@@ -331,6 +408,81 @@ def test_calculate_late_fee_not_returned_book():
     assert round(result["fee_amount"], 2) == 0.00
     assert result["days_overdue"] == 0
     assert result['status'] == "Book not returned."
+
+
+def test_calculate_late_fee_zero_overdue():
+    # Test7 book returned exactly on due date should have zero fee
+    add_book_to_catalog("On Time Book", "Author", "5000000000010", 1)
+    book = get_book_by_isbn("5000000000010")
+    borrow_book_by_patron("500010", book["id"])
+    # Set return_date exactly on due_date
+    record = get_patron_borrowing_history("500010")[0]
+    update_borrow_record_return_date("500010", book["id"], record["due_date"])
+    
+    result = calculate_late_fee_for_book("500010", book["id"])
+    assert result['fee_amount'] == 0.00
+    assert result['days_overdue'] == 0
+    assert result['status'] == "Book is not overdue."
+
+
+def test_calculate_late_fee_max_fee_cap():
+    # Test8 book overdue more than enough days to hit $15 max
+    add_book_to_catalog("Max Fee Book", "Author", "5000000000011", 1)
+    book = get_book_by_isbn("5000000000011")
+    borrow_book_by_patron("500011", book["id"])
+    
+    record = get_patron_borrowing_history("500011")[0]
+    update_borrow_record_return_date("500011", book["id"], record["due_date"] + timedelta(days=25))
+    
+    result = calculate_late_fee_for_book("500011", book["id"])
+    assert round(result['fee_amount'], 2) == 15.00
+    assert result['days_overdue'] == 25
+    assert result['status'] == "Fee amount successfully calculated."
+
+
+def test_calculate_late_fee_under_seven_days():
+    # Test9 Book overdue 5 days (under 7) should be 5*0.5 = 2.5
+    add_book_to_catalog("Short Overdue Book", "Author", "5000000000012", 1)
+    book = get_book_by_isbn("5000000000012")
+    borrow_book_by_patron("500012", book["id"])
+    
+    record = get_patron_borrowing_history("500012")[0]
+    update_borrow_record_return_date("500012", book["id"], record["due_date"] + timedelta(days=5))
+    
+    result = calculate_late_fee_for_book("500012", book["id"])
+    assert round(result['fee_amount'], 2) == 2.50
+    assert result['days_overdue'] == 5
+    assert result['status'] == "Fee amount successfully calculated."
+
+
+def test_calculate_late_fee_exactly_seven_days():
+    # Test10 Book overdue exactly 7 days should use $0.5 per day = 3.5
+    add_book_to_catalog("Seven Day Book", "Author", "5000000000013", 1)
+    book = get_book_by_isbn("5000000000013")
+    borrow_book_by_patron("500013", book["id"])
+    
+    record = get_patron_borrowing_history("500013")[0]
+    update_borrow_record_return_date("500013", book["id"], record["due_date"] + timedelta(days=7))
+    
+    result = calculate_late_fee_for_book("500013", book["id"])
+    assert round(result['fee_amount'], 2) == 3.50
+    assert result['days_overdue'] == 7
+    assert result['status'] == "Fee amount successfully calculated."
+
+
+def test_calculate_late_fee_over_seven_days():
+    # Test11 book overdue 10 days should be 3.50 + (10-7)*1 = 6.50
+    add_book_to_catalog("Over Seven Book", "Author", "5000000000014", 1)
+    book = get_book_by_isbn("5000000000014")
+    borrow_book_by_patron("500014", book["id"])
+    
+    record = get_patron_borrowing_history("500014")[0]
+    update_borrow_record_return_date("500014", book["id"], record["due_date"] + timedelta(days=10))
+    
+    result = calculate_late_fee_for_book("500014", book["id"])
+    assert round(result['fee_amount'], 2) == 6.50
+    assert result['days_overdue'] == 10
+    assert result['status'] == "Fee amount successfully calculated."
 
 #-----------------------------------------------------------------------------------------------------------------------
 
@@ -378,6 +530,23 @@ def test_search_books_in_catalog_invalid_type():
     results = search_books_in_catalog("Harry Potter", "invalid_type")
     
     assert results == []
+
+
+def test_search_books_in_catalog_multiple_matches_author():
+    # Test6 multiple books by same author
+    add_book_to_catalog("Book A", "Same Author", "6000000000011", 1)
+    add_book_to_catalog("Book B", "Same Author", "6000000000012", 1)
+    results = search_books_in_catalog("same author", "author")
+    assert len(results) >= 2
+    authors = [b["author"].lower() for b in results]
+    assert all(a == "same author" for a in authors)
+
+
+def test_search_books_in_catalog_whitespace_search_term():
+    # Test7 search term with leading/trailing whitespace
+    add_book_to_catalog("Whitespace Test", "Author", "6000000000013", 1)
+    results = search_books_in_catalog("  whitespace test  ", "title")
+    assert any("whitespace test" in book["title"].lower() for book in results)
 
 #-----------------------------------------------------------------------------------------------------------------------
 
@@ -452,3 +621,33 @@ def test_get_patron_status_report_borrowing_history():
         assert all(rec in record for rec in ["book_id", "title", "author", "borrow_date", "due_date", "return_date"])
     assert round(report["total_fees_owed"], 2) == 0.00
     assert report["num_current_borrowed_books"] == 0
+
+def test_get_patron_status_report_overdue_books():
+    # Test6: patron has overdue books, total_fees_owed > 0
+    add_book_to_catalog("Overdue Book", "Author", "7000000000005", 1)
+    book = get_book_by_isbn("7000000000005")
+    borrow_book_by_patron("700001", book["id"])
+    # Manipulate borrow record to be overdue
+    record = get_patron_borrowing_history("700001")[0]
+    update_borrow_record_return_date("700001", book["id"], record["due_date"] + timedelta(days=5))
+    calculate_late_fee_for_book("700001", book["id"])
+
+    report = get_patron_status_report("700001")
+    assert len(report["current_borrowed_books"]) == 0
+    assert len(report["borrowing_history"]) == 1
+    assert round(report["total_fees_owed"], 2) > 0
+    assert report["num_current_borrowed_books"] == 0
+
+
+def test_get_patron_status_report_multiple_current_books():
+    # Test7: patron currently borrowing multiple books
+    add_book_to_catalog("Book A", "Author A", "7000000000006", 1)
+    add_book_to_catalog("Book B", "Author B", "7000000000007", 1)
+    book1 = get_book_by_isbn("7000000000006")
+    book2 = get_book_by_isbn("7000000000007")
+    borrow_book_by_patron("700002", book1["id"])
+    borrow_book_by_patron("700002", book2["id"])
+
+    report = get_patron_status_report("700002")
+    assert report["num_current_borrowed_books"] == 2
+    assert len(report["current_borrowed_books"]) == 2

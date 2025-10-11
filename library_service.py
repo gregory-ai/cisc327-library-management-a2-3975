@@ -83,7 +83,7 @@ def borrow_book_by_patron(patron_id: str, book_id: int) -> Tuple[bool, str]:
     # Check patron's current borrowed books count
     current_borrowed = get_patron_borrow_count(patron_id)
     
-    if current_borrowed > 5:
+    if current_borrowed >= 5:
         return False, "You have reached the maximum borrowing limit of 5 books."
     
     # Create borrow record
@@ -224,6 +224,8 @@ def search_books_in_catalog(search_term: str, search_type: str) -> List[Dict]:
     Returns:
         List of books matching search term based on search type.
     """
+
+    search_term = search_term.strip()
     all_books = get_all_books()
 
     if not search_term: 
@@ -267,15 +269,14 @@ def get_patron_status_report(patron_id: str) -> Dict:
         'status' : ""
     }
 
-    # Validate patron ID
     if not patron_id or not patron_id.isdigit() or len(patron_id) != 6:
         status_report['status'] = "Invalid patron ID. Must be exactly 6 digits."
         return status_report
 
-    # Current borrowed books
-    borrowed_books = get_patron_borrowed_books(patron_id)
     total_late_fees = 0.0
 
+    # current borrowed books
+    borrowed_books = get_patron_borrowed_books(patron_id)
     for book in borrowed_books:
         status_report['current_borrowed_books'].append({
             'book_id': book['book_id'],
@@ -284,15 +285,13 @@ def get_patron_status_report(patron_id: str) -> Dict:
             'due_date': book['due_date'],
             'is_overdue': book['is_overdue']
         })
-        late_fees = calculate_late_fee_for_book(patron_id, book['book_id'])
-        total_late_fees += late_fees.get('fee_amount', 0.0)
+        late_fee_info = calculate_late_fee_for_book(patron_id, book['book_id'])
+        total_late_fees += late_fee_info.get('fee_amount', 0.0)
 
     status_report['num_current_borrowed_books'] = len(borrowed_books)
-    status_report['total_fees_owed'] = round(total_late_fees, 2)
 
-    # History borrowed books
+    # borrowing history (includes returned books)
     history_records = get_patron_borrowing_history(patron_id)
-
     for record in history_records:
         status_report['borrowing_history'].append({
             'book_id': record['book_id'],
@@ -302,6 +301,11 @@ def get_patron_status_report(patron_id: str) -> Dict:
             'due_date': record['due_date'],
             'return_date': record['return_date']
         })
+        # include fees for returned overdue books
+        if record['return_date']:
+            late_fee_info = calculate_late_fee_for_book(patron_id, record['book_id'])
+            total_late_fees += late_fee_info.get('fee_amount', 0.0)
 
+    status_report['total_fees_owed'] = round(total_late_fees, 2)
     status_report['status'] = "Successfully retrieved patron's status report."
     return status_report
