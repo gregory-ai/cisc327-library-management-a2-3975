@@ -3,7 +3,7 @@ API Routes - JSON API endpoints
 """
 
 from flask import Blueprint, jsonify, request
-from library_service import calculate_late_fee_for_book, search_books_in_catalog
+from library_service import calculate_late_fee_for_book, search_books_in_catalog, get_patron_status_report
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
@@ -37,3 +37,33 @@ def search_books_api():
         'results': books,
         'count': len(books)
     })
+
+@api_bp.route('/patron_status/<patron_id>')
+def get_patron_status_api(patron_id):
+    """
+    Get patron status report.
+    Implements R7: Patron Status Report
+    """
+    patron_id = patron_id.strip()
+
+    if not patron_id.isdigit() or len(patron_id) != 6:
+        return jsonify({
+            'status': "Invalid patron ID. Must be exactly 6 digits.",
+            'error': True
+        }), 400
+
+    report = get_patron_status_report(patron_id)
+    status_message = report.get('status', '')
+
+    if "Invalid" in status_message or "not found" in status_message.lower():
+        return jsonify({
+            'status': status_message,
+            'error': True
+        }), 404
+
+    return jsonify({
+        'patron_id': patron_id,
+        'report': report,
+        'status': status_message,
+        'error': False
+    }), 200

@@ -15,6 +15,7 @@ from library_service import (
 from routes.catalog_routes import catalog_bp  # blueprint
 from routes.borrowing_routes import borrowing_bp # blueprint
 from routes.search_routes import search_bp # blueprint
+from routes.reports_routes import reports_bp # blueprint
 from database import get_book_by_isbn, get_book_by_id, update_borrow_record_return_date, get_patron_borrowing_history, get_db_connection
 
 def reset_database():
@@ -50,6 +51,7 @@ def client():
     app.register_blueprint(catalog_bp)
     app.register_blueprint(borrowing_bp) 
     app.register_blueprint(search_bp)
+    app.register_blueprint(reports_bp)
 
     # Makes client available to any test with client argument 
     with app.test_client() as client:

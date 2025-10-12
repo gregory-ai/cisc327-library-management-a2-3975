@@ -36,7 +36,7 @@ Run the application:
 
 /* I had to use:
         venv/bin/python app.py
-    because my termincal kept using my aliased python
+    because my terminal kept using my aliased python
 */
 ```bash
 python app.py
