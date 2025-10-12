@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>📊 Patron Status Report</h2>
+<p>View the current borrowing status and history for a library patron.</p>
+
+<form method="GET" action="{{ url_for('reports.show_patron_status_report') }}">
+    <div class="form-group">
+        <label for="patron_id">Patron ID</label>
+        <input type="text" id="patron_id" name="patron_id" 
+               placeholder="Enter 6-digit Patron ID" pattern="[0-9]{6}" maxlength="6" 
+               value="{{ patron_id or '' }}" required>
+    </div>
+    
+    <div class="form-group">
+        <button type="submit" class="btn">📋 Get Report</button>
+    </div>
+</form>
+
+{% if report %}
+    <hr style="margin: 30px 0;">
+    <h3>Status Report for Patron {{ patron_id }}</h3>
+    
+    <p><strong>Total Fees Owed:</strong> ${{ "%.2f"|format(report.total_fees_owed) }}</p>
+    <p><strong>Books Currently Borrowed:</strong> {{ report.num_current_borrowed_books }}</p>
+
+    <h4>📚 Current Borrowed Books</h4>
+    {% if report.current_borrowed_books %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Book ID</th>
+                    <th>Title</th>
+                    <th>Author</th>
+                    <th>Due Date</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for book in report.current_borrowed_books %}
+                <tr>
+                    <td>{{ book.book_id }}</td>
+                    <td>{{ book.title }}</td>
+                    <td>{{ book.author }}</td>
+                    <td>{{ book.due_date }}</td>
+                    <td>
+                        {% if book.is_overdue %}
+                            <span class="status-unavailable">Overdue</span>
+                        {% else %}
+                            <span class="status-available">On Time</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p style="color: #666;">No books currently borrowed.</p>
+    {% endif %}
+
+    <h4 style="margin-top: 30px;">📖 Borrowing History</h4>
+    {% if report.borrowing_history %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Book ID</th>
+                    <th>Title</th>
+                    <th>Author</th>
+                    <th>Borrow Date</th>
+                    <th>Due Date</th>
+                    <th>Return Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in report.borrowing_history %}
+                <tr>
+                    <td>{{ record.book_id }}</td>
+                    <td>{{ record.title }}</td>
+                    <td>{{ record.author }}</td>
+                    <td>{{ record.borrow_date }}</td>
+                    <td>{{ record.due_date }}</td>
+                    <td>
+                        {% if record.return_date %}
+                            {{ record.return_date }}
+                        {% else %}
+                            <span style="color: #888;">Not yet returned</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p style="color: #666;">No borrowing history found.</p>
+    {% endif %}
+{% elif patron_id %}
+    <hr style="margin: 30px 0;">
+    <p style="color: red;">⚠️ {{ status_message or "Unable to retrieve patron report." }}</p>
+{% endif %}
+
+{% endblock %}
