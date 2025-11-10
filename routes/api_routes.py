@@ -3,7 +3,7 @@ API Routes - JSON API endpoints
 """
 
 from flask import Blueprint, jsonify, request
-from library_service import calculate_late_fee_for_book, search_books_in_catalog, get_patron_status_report
+from services.library_service import calculate_late_fee_for_book, search_books_in_catalog, get_patron_status_report
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
 
