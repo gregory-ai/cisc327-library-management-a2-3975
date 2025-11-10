@@ -3,7 +3,7 @@ Late Fee Routes - API endpoint for calculating late fees
 """
 
 from flask import Blueprint, jsonify
-from library_service import calculate_late_fee_for_book 
+from services.library_service import calculate_late_fee_for_book 
 
 late_fee_bp = Blueprint("late_fee", __name__)
 

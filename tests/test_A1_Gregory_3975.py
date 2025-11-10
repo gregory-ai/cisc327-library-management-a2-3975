@@ -1,9 +1,9 @@
 import os
 import pytest
-from flask import Flask
 from datetime import datetime, timedelta
+from unittest.mock import Mock
 
-from library_service import (
+from services.library_service import (
     add_book_to_catalog, 
     borrow_book_by_patron,
     return_book_by_patron,
@@ -12,52 +12,7 @@ from library_service import (
     get_patron_status_report,
 )
 
-from routes.catalog_routes import catalog_bp  # blueprint
-from routes.borrowing_routes import borrowing_bp # blueprint
-from routes.search_routes import search_bp # blueprint
-from routes.reports_routes import reports_bp # blueprint
-from database import get_book_by_isbn, get_book_by_id, update_borrow_record_return_date, get_patron_borrowing_history, get_db_connection
-
-def reset_database():
-    """
-    Reset the database by clearing all tables.
-    """
-    conn = get_db_connection()
-    try:
-        # Clear borrow records first 
-        conn.execute("DELETE FROM borrow_records")
-        # Clear books
-        conn.execute("DELETE FROM books")
-        conn.commit()
-    finally:
-        conn.close()
-
-@pytest.fixture(autouse=True)
-def clear_db():
-    reset_database()  # Implement this to clear all books, patrons, borrows
-    yield
-
-# pytest fixture that builds a temporary Flask app for testing 
-@pytest.fixture
-def client():
-    # Absolute path to templates/ directory 
-    template_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "templates"))
-    
-    # Create Flask app just for testing 
-    app = Flask(__name__, template_folder=template_dir)
-    app.config["TESTING"] = True
-
-    # Register catalog blueprint
-    app.register_blueprint(catalog_bp)
-    app.register_blueprint(borrowing_bp) 
-    app.register_blueprint(search_bp)
-    app.register_blueprint(reports_bp)
-
-    # Makes client available to any test with client argument 
-    with app.test_client() as client:
-        with app.app_context():
-            yield client
-
+from database import get_book_by_isbn, update_borrow_record_return_date, get_patron_borrowing_history
 
 ''' Tests for Functional Requirements '''
 
